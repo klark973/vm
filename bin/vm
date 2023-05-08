@@ -1,0 +1,6 @@
+#!/bin/bash -efu
+
+PROG="${0##*/}"
+LIBEXEC="$HOME/$PROG/scripts"
+
+. "$LIBEXEC/$PROG-main.sh"

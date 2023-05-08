@@ -1,0 +1,41 @@
+#!/bin/sh
+#
+# This file is covered by the GNU General Public License
+# version 3, or (at your option) any later version, which
+# should be included with sources as the file COPYING.
+#
+# Copyright (C) 2023, Leonid Krivoshein <klark@altlinux.org>
+#
+f="/root/.ssh/authorized_keys"
+sshkeys="$(cat SSHKEYS 2>/dev/null)" ||
+	fatal "File 'SSHKEYS' is required!"
+[ -s /etc/openssh/sshd_config ] ||
+	fatal "Can't run OpenSSH from this rescue."
+#echo "PermitRootLogin yes" >>/etc/openssh/sshd_config
+run mkdir -p -m 0700 /root/.ssh
+run dhcpcd
+
+for key in $sshkeys; do
+	if [ -s "$key" ]; then
+		run cat -- "$key" >>"$f"
+	else
+		printf "Key '%s' not found, skipped.\n" "$key" >&2
+	fi
+done
+
+run chmod -- 600 "$f"
+run ssh-keygen -A
+
+:> "$OUTDIR"/RELEASE
+service sshd start >/dev/tty1 2>&1
+cat >/dev/tty1 <<-EOF
+
+SSH server now ready! You can connect to it...
+
+Don't forget delete the '$OUTDIR/RELEASE' file
+after work for normal shutdown of the guest VM.
+EOF
+
+while [ -f "$OUTDIR"/RELEASE ]; do
+	sleep 1
+done

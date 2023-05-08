@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# This file is covered by the GNU General Public License
+# version 3, or (at your option) any later version, which
+# should be included with sources as the file COPYING.
+#
+# Copyright (C) 2023, Leonid Krivoshein <klark@altlinux.org>
+#
+f="/mnt/system1/root/.ssh/authorized_keys"
+sshkeys="$(cat SSHKEYS 2>/dev/null)" ||
+	fatal "File 'SSHKEYS' is required!"
+run mount-system && [ -d /mnt/system1/etc/openssh ] ||
+	fatal "Can't mount target system with the OpenSSH."
+[ ! -f "$f.bak" ] ||
+	fatal "May be SSH-keys already installed on this system?"
+run mkdir -p -m 0700 /mnt/system1/root/.ssh
+
+if [ -f "$f" ]; then
+	run cp -Lpf -- "$f" "$f.bak"
+	run chmod -- 0600 "$f.bak"
+fi
+
+for key in $sshkeys; do
+	if [ -s "$key" ]; then
+		run cat -- "$key" >>"$f"
+	else
+		printf "Key '%s' not found, skipped.\n" "$key" >&2
+	fi
+done
+
+run chmod -- 600 "$f"

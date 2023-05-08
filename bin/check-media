@@ -1,0 +1,9 @@
+#!/bin/sh
+
+MEDIA="/media/$USER/Samsung-2T"
+[ -d "$MEDIA/alt-mirror/Sisyphus" ] ||
+	MEDIA="/media/$USER/WD-Elements-5T"
+if [ ! -d "$MEDIA/alt-mirror/Sisyphus" ]; then
+	echo "External media not connected!" >&2
+	exit 1
+fi

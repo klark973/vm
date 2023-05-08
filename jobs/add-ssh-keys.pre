@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# This file is covered by the GNU General Public License
+# version 3, or (at your option) any later version, which
+# should be included with sources as the file COPYING.
+#
+# Copyright (C) 2023, Leonid Krivoshein <klark@altlinux.org>
+#
+for key in "${SSHKEYS[@]}"; do
+	[ -s "$key" ] ||
+		continue
+	cp -Lf -- "$key" "$WORKDIR"/.in/
+	printf "%s\n" "${key##*/}" >>"$WORKDIR"/.in/SSHKEYS
+done
+
+unset key
+[ -s "$WORKDIR"/.in/SSHKEYS ]
