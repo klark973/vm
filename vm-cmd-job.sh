@@ -78,7 +78,8 @@ vm_cmd_job_exec() {
 vm_cmd_job_pre() {
 	[ ! -s "$1.pre" ] ||
 		( . "$1.pre" )
-	cp -Lf -- "$1.job" "$WORKDIR"/.in/job.sh
+	[ -s "$WORKDIR"/.in/job.sh ] ||
+		cp -Lf -- "$1.job" "$WORKDIR"/.in/job.sh
 }
 
 vm_cmd_job_post() {
