@@ -1,0 +1,375 @@
+#!/bin/sh -efu
+###
+### This file is covered by the GNU General Public License
+### version 3, or (at your option) any later version, which
+### should be included with sources as the file COPYING.
+###
+### Copyright (C) 2023, ALT Linux Team
+### Author: Leonid Krivoshein <klark@altlinux.org>
+
+MEDIA_UUID=
+MEDIA_LABEL="alt-autorun"
+RESCUE_DATE=
+RECOVERY=
+LOWMEM=1
+ADD_ARGS=
+SPLIT_IMAGE=
+SOURCE_IMAGE=
+DEPLOY_IMAGE="$(realpath .)/alt-deploy.iso"
+MEMDISK_IMAGE="$(realpath .)/alt-deploy_VTMEMDISK.iso"
+PROG="${0##*/}"
+
+
+show_help() {
+	cat <<-EOF
+	Usage: $PROG [<options>] [--] <SOURCE.iso> [<DEPLOY.iso>]
+
+	SOURCE.iso: path to the source ALT ISO with "rescue" stage2
+	DEPLOY.iso: path to the saving custom deploy ISO-image
+
+	Options:
+	  -a, --args <ARGS>     Specify additional kernel arguments.
+	  -d, --date <DATE>     Specify deploy image date (YYYY-MM-DD).
+	  -L, --label <LABEL>   Specify external deploy media LABEL.
+	  -n, --no-lowmem       Copy stage2 squashfs into RAM-disk.
+	  -r, --recovery <DIR>  Specify path to injecting directory.
+	  -s, --split <PATH>    Separate second part of the deploy
+	                        media to specified ISO-image path.
+	  -U, --uuid <UUID>     Specify external deploy media UUID.
+	  -v, --version         Show this program version and exit.
+	  -h, --help            Show this help message and exit.
+
+	Example:
+	  $PROG -d 2017-12-31 -s /ISO/ALT-Workstation/alt-deploy.iso \\
+	      -L Ventoy -r backup -- regular-rescue-latest-x86_64.iso
+	EOF
+	exit 0
+}
+
+fatal() {
+	printf "%s fatal: %s\n" "$PROG" "$*" >&2
+	exit 1
+}
+
+write_grub_cfg() {
+	local args=
+
+	args="$(echo "$append" |sed -e "s|@METHOD_STRING@|$method|")"
+
+	cat >boot/grub/grub.cfg <<-EOF
+	if keystatus --shift; then
+	   set timeout=-1
+	else
+	   set timeout=0
+	fi
+
+	menuentry 'Rescue Deploy (dangerous for you data!)' $classes {
+	    insmod part_msdos
+	    insmod part_gpt
+	    insmod ext2
+	    insmod gzio
+
+	    linux /$kernel $args
+	    initrd /$initrd
+	}
+	EOF
+
+	chmod -- 0444 boot/grub/grub.cfg
+}
+
+write_isolinux_cfg() {
+	local args=
+
+	if [ -n "$isolinux" ]; then
+		args="$(echo "$append" |sed -e "s|@METHOD_STRING@|$method|")"
+
+		cat >syslinux/isolinux.cfg <<-EOF
+		totaltimeout 0
+		timeout 0
+		prompt 0
+
+		label deploy
+		    kernel /$kernel
+		    append $args
+
+		default deploy
+		EOF
+
+		chmod -- 0444 syslinux/isolinux.cfg
+	fi
+}
+
+write_iso_image() {
+	find . -type d -exec chmod -- 0775 {} \;
+
+	if [ -n "$isolinux" ]; then
+		xorriso -follow param -read_mkisofsrc \
+			-volume_date uuid "$ISO_UUID" \
+			-as mkisofs -J -l -r -v \
+			-b "$biosfiles" \
+			-c "$bootcat" \
+			-no-emul-boot \
+			-boot-load-size 4 \
+			-boot-info-table \
+			-eltorito-alt-boot \
+			-e EFI/.efiboot.img \
+			-no-emul-boot \
+			-isohybrid-gpt-basdat . >"$1"
+		return $?
+	fi
+
+	xorriso -follow param -read_mkisofsrc \
+		-volume_date uuid "$ISO_UUID" \
+		-as mkisofs -J -l -r -v \
+		-eltorito-boot boot/grub/bios.img \
+		-no-emul-boot \
+		-boot-load-size 4 \
+		-boot-info-table \
+		-partition_offset 16 \
+		--eltorito-catalog "$bootcat" \
+		--grub2-boot-info \
+		--grub2-mbr boot/grub/i386-pc/boot_hybrid.img \
+		--mbr-force-bootable \
+		-eltorito-alt-boot \
+		-e EFI/.efiboot.img \
+		-no-emul-boot \
+		-append_partition 2 0xef EFI/.efiboot.img \
+		-appended_part_as_gpt . >"$1"
+	return $?
+}
+
+cleanup() {
+	local rv="$?"
+
+	trap - EXIT; cd /
+	[ -z "${workdir-}" ] ||
+		rm -rf --one-file-system -- "$workdir"
+	rm -f /tmp/.mkisofsrc
+
+	return $rv
+}
+
+
+# Entry point
+[ "$(id -u)" != 0 ] ||
+	fatal "Don't use root account for launch this script!"
+
+# Parse arguments
+s_opts="+a:d:L:nr:s:U:vh"
+l_opts="args:,date:,label:,no-lowmem,recovery:,split:,uuid:,version,help"
+l_opts=$(getopt -n "$PROG" -o "$s_opts" -l "$l_opts" -- "$@") ||
+	fatal "Invalid command line usage, try '$PROG -h' for more details."
+eval set -- "$l_opts"
+unset s_opts l_opts
+#
+while [ "$#" != 0 ]; do
+	case "$1" in
+	-a|--args)
+		ADD_ARGS="${2-}"
+		shift
+		;;
+	-d|--date)
+		RESCUE_DATE="${2-}"
+		shift
+		;;
+	-L|--label)
+		MEDIA_UUID=
+		MEDIA_LABEL="${2-}"
+		shift
+		;;
+	-n|--no-lowmem)
+		LOWMEM=
+		;;
+	-r|--recovery)
+		[ -s "${2-}/autorun" ] ||
+			fatal "Recovery directory not found: ${2-}"
+		RECOVERY="$(realpath -- "$2")"
+		shift
+		;;
+	-s|--split)
+		SPLIT_IMAGE="${2-}"
+		shift
+		;;
+	-U|--uuid)
+		MEDIA_LABEL=
+		MEDIA_UUID="${2-}"
+		shift
+		;;
+	-v|--version)
+		printf "%s %s\n" "$PROG" "1.0"
+		exit 0
+		;;
+	-h|--help)
+		show_help
+		;;
+	--)	shift
+		break
+		;;
+	*)	break
+		;;
+	esac
+	shift
+done
+#
+[ "$#" != 0 ] ||
+	fatal "Not enough arguments, try '$PROG -h' for more details."
+[ -s "$1" ] ||
+	fatal "Source ISO-image not found: '$1'."
+SOURCE_IMAGE="$(realpath -- "$1")"
+shift
+#
+if [ "$#" != 0 ]; then
+	DEPLOY_IMAGE="${1%/*}"
+	[ -d "$DEPLOY_IMAGE" ] ||
+		fatal "Path not found: '$DEPLOY_IMAGE'."
+	DEPLOY_IMAGE="$(realpath -- "$DEPLOY_IMAGE")/${1##*/}"
+	MEMDISK_IMAGE="${DEPLOY_IMAGE%.iso}_VTMEMDISK.iso"
+	[ "$#" = 1 ] ||
+		fatal "Too many arguments, try '$PROG -h' for more details."
+	shift
+fi
+
+# Check requires
+for i in du 7z xorriso; do
+	which $i >/dev/null 2>&1 ||
+		fatal "The binary not installed: '$i'."
+done
+
+# Set required argument
+if [ -n "$MEDIA_LABEL" ]; then
+	media_arg="label:$MEDIA_LABEL"
+elif [ -n "$MEDIA_UUID" ]; then
+	media_arg="uuid:$MEDIA_UUID"
+elif [ -n "$SPLIT_IMAGE" ]; then
+	fatal "Media LABEL or UUID must be specified."
+fi
+
+# Create working directory
+export TMPDIR="${TMPDIR:-/tmp}"
+workdir="$(mktemp -dt -- "$PROG-XXXXXXXX.tmp")" ||
+	fatal "Couldn't create a working directory."
+mkdir -vp -m 0755 -- "$workdir/in" "$workdir/out/.disk"
+trap cleanup EXIT
+
+# Remove old results first
+rm -vf -- "$DEPLOY_IMAGE" "$MEMDISK_IMAGE"
+
+# Unpack source image
+cd -- "$workdir/in/"
+7z x -- "$SOURCE_IMAGE" .disk EFI boot syslinux rescue ||:
+
+# Move only what is really needed
+for i in EFI boot syslinux rescue; do
+	[ ! -e "$i" ] ||
+		mv -vf -- "$i" "$workdir/out/"
+done
+
+# Check requires
+cd -- "$workdir/out/"
+initrd="boot/initrd.img"
+[ ! -s boot/full.cz ] ||
+	mv -vf -- boot/full.cz "$initrd"
+kernel="boot/vmlinuz"
+#
+if [ -s syslinux/isolinux.cfg ] && [ -s syslinux/isolinux.bin ]; then
+	biosfiles="syslinux/isolinux.bin"
+	bootcat="syslinux/boot.cat"
+	isolinux=1
+else
+	biosfiles="boot/grub/bios.img boot/grub/i386-pc/boot_hybrid.img"
+	bootcat="boot/grub/boot.cat"
+	rm -rvf syslinux
+	isolinux=
+fi
+#
+for i in			\
+	$kernel			\
+	$initrd			\
+	$bootcat		\
+	$biosfiles		\
+	"../in/.disk/arch"	\
+	"../in/.disk/info"	\
+	boot/grub/grub.cfg	\
+	EFI/BOOT/grub.cfg	\
+	EFI/.efiboot.img 	\
+	rescue
+do
+	[ -s "$i" ] ||
+		fatal "$i not found."
+done
+
+# Determinate rescue date and architecture
+RESCUE_ARCH="$(head -n1 -- "../in/.disk/arch")"
+[ -n "$RESCUE_DATE" ] ||
+	RESCUE_DATE="$(date '+%F')"
+ISO_UUID="$RESCUE_DATE-00-00-00-00"
+
+# Calculate initial RAM-disk size and set boot args
+ramdisk_size="$((4 * $(du -lsB4k rescue |cut -f1) + 1))"
+classes="--class gnu-linux --class gnu --class os --unrestricted"
+append="initrd=/$initrd fastboot root=bootchain bootchain=fg,altboot"
+append="$append bc_debug quiet live automatic=method:@METHOD_STRING@"
+append="$append ramdisk_size=$ramdisk_size stagename=rescue nosplash"
+append="$append changedisk rescue showopts ${LOWMEM:+lowmem }$ADD_ARGS"
+if [ -n "$RECOVERY" ]; then
+	append="$append autorun=method:cdrom,label:,uuid:,directory:"
+else
+	append="$append autorun=method:disk,uuid:,$media_arg,directory:"
+fi
+if grep -qwi regular "../in/.disk/info"; then
+	method="disk,uuid:$ISO_UUID"
+else
+	method="cdrom,fuid:$ISO_UUID"
+fi
+
+# Inject recovery data
+if [ -n "$RECOVERY" ]; then
+	cp -Lvrf -- "$RECOVERY" recovery
+	chmod 0755 recovery/autorun
+fi
+
+# Create fuid
+:> "$ISO_UUID"
+chmod -- 0444 "$ISO_UUID"
+
+# Save disk info
+echo "$RESCUE_ARCH" >.disk/arch
+echo "$RESCUE_DATE" |tr -d \- >.disk/date
+echo "ALT Deploy $RESCUE_ARCH build $RESCUE_DATE" >.disk/info
+chmod -- 0444 .disk/arch .disk/date .disk/info
+
+# Create custom grub menu
+write_grub_cfg
+
+# Create custom isolinux menu
+write_isolinux_cfg
+
+# Create temporary mkisofs config
+cat >/tmp/.mkisofsrc <<EOF
+APPI=DEPLOY
+COPY=
+ABST=
+BIBL=
+PREP=
+PUBL=ALT LINUX TEAM
+SYSI=LINUX
+VOLI=ALT Rescue Deploy
+VOLS=ALT Deploy $RESCUE_ARCH build $RESCUE_DATE
+EOF
+
+# Create custom deploy ISO-image
+ISO_UUID="$(echo "$ISO_UUID" |tr -d \-)"
+write_iso_image "$DEPLOY_IMAGE"
+
+# Create custom MEMDISK image
+if [ -n "$SPLIT_IMAGE" ]; then
+	rm -rvf rescue recovery boot/grub/grub.cfg syslinux/isolinux.cfg
+	method="disk,$media_arg,directory:$SPLIT_IMAGE"
+	write_grub_cfg
+	write_isolinux_cfg
+	write_iso_image "$MEMDISK_IMAGE"
+	du -sh -- "$MEMDISK_IMAGE"
+fi
+
+# Finish
+du -sh -- "$DEPLOY_IMAGE"
