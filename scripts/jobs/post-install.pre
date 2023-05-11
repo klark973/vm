@@ -1,0 +1,55 @@
+#!/bin/bash
+#
+# This file is covered by the GNU General Public License
+# version 3, or (at your option) any later version, which
+# should be included with sources as the file COPYING.
+#
+# Copyright (C) 2023, Leonid Krivoshein <klark@altlinux.org>
+#
+SETUP_VERBOSE=
+SETUP_FILES=()
+SETUP_ROOTDEV=
+SETUP_HOSTNAME=
+SETUP_USER_UID="$(id -u)"
+SETUP_USERNAME="$(id -un)"
+SETUP_PROFILE="${SETUP_PROFILE:-post-install}"
+SETUP_SCRIPT="${SETUP_PROFILE}.sh"
+
+[ ! -s "$HOSTDIR/$SETUP_PROFILE.env" ] ||
+	. "$HOSTDIR/$SETUP_PROFILE.env"
+[ -n "$SETUP_SCRIPT" ] ||
+	fatal "Setup script name is required!"
+[ -s "$HOSTDIR/$SETUP_SCRIPT" ] ||
+	fatal "Setup script not found: '$SETUP_SCRIPT'!"
+[ ! -s "$HOSTDIR/$SETUP_PROFILE.pre" ] ||
+	. "$HOSTDIR/$SETUP_PROFILE.pre"
+printf "* Copying source files and scripts...\n"
+
+( cd "$HOSTDIR"/
+
+  for fname in "${SETUP_FILES[@]}"; do
+	cp -Lf -- "$fname" "$WORKDIR"/.in/
+  done
+)
+[ -z "$SETUP_VERBOSE" ] ||
+	:> "$WORKDIR"/.in/DEBUG
+[ -z "$SETUP_ROOTDEV" ] ||
+	printf "%s\n" "$SETUP_ROOTDEV" > "$WORKDIR"/.in/ROOTDEV
+fname="$HOSTDIR/$SETUP_PROFILE.host-$SETUP_HOSTNAME.tgz"
+[ -z "$SETUP_HOSTNAME" ] || [ ! -s "$fname" ] ||
+	cp -Lf -- "$fname" "$WORKDIR"/.in/
+fname="$HOSTDIR/$SETUP_PROFILE.user-$SETUP_USERNAME.tgz"
+[ -z "$SETUP_USERNAME" ] || [ ! -s "$fname" ] ||
+	cp -Lf -- "$fname" "$WORKDIR"/.in/
+[ ! -s "$HOSTDIR/$SETUP_PROFILE.env" ] ||
+	cp -Lf -- "$HOSTDIR/$SETUP_PROFILE.env" "$WORKDIR"/.in/job.env
+grep -qsE -- "^SETUP_PROFILE=" "$WORKDIR"/.in/job.env ||
+	echo "SETUP_PROFILE=$SETUP_PROFILE" >> "$WORKDIR"/.in/job.env
+grep -qsE -- "^SETUP_HOSTNAME=" "$WORKDIR"/.in/job.env ||
+	echo "SETUP_HOSTNAME=$SETUP_HOSTNAME" >> "$WORKDIR"/.in/job.env
+grep -qsE -- "^SETUP_USERNAME=" "$WORKDIR"/.in/job.env ||
+	echo "SETUP_USERNAME=$SETUP_USERNAME" >> "$WORKDIR"/.in/job.env
+grep -qsE -- "^SETUP_USER_UID=" "$WORKDIR"/.in/job.env ||
+	echo "SETUP_USER_UID=$SETUP_USER_UID" >> "$WORKDIR"/.in/job.env
+cp -Lf -- "$SETUP_SCRIPT" "$WORKDIR"/.in/post-install.sh
+unset fname

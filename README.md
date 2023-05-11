@@ -126,6 +126,92 @@ jobs to be executed via ssh immediately, no need to wait for the VM to start.
 To shut down a VM in a SSH-session, just remove the `$WORKDIR/.out/RELEASE`
 file and disconnect.
 
+### post-install job
+
+Allows you to perform certain work after installing the OS:
+
+- on the host system in your `post-install.pre` script and also copying
+  the files to `$INDIR`;
+- in ALT Rescue guest system with `post-install.sh` script;
+- in the chroot of the installed OS from the same script;
+- again on the host system in your `post-install.post` script.
+
+The results are output to the terminal of the host system during the
+execution of all scripts inside ALT Rescue and are written to the
+`$OUTDIR/job.log` log. A typical usage is to have only one set of files
+in the virtual machine directory (`$HOSTDIR`) to run this job with the
+following default names:
+
+- `post-install.sh` is the only required file for this job. Note that its
+   name is determined by the `$SETUP_SCRIPT` variable, which can be changed
+   through the passed set of parameters, or by the `$SETUP_PROFILE` variable,
+   which can be exported through the environment when the command is run;
+- `post-install.env` (optional) - a set of parameters passed to all executable
+  scripts. There can be any arbitrary data, not just those described below;
+- `post-install.pre` (optional) - executed on the host system before starting
+  the main part of the job and can be used, for example, to check the
+  possibility of its execution;
+- `post-install.post` (optional) - executed on the host system after the
+  completion of the main part of the task and can be used, for example,
+  to process the results of the job;
+- `post-install.host-$SETUP_HOSTNAME.tgz` (optional) - archive, usually
+  unpacked by your script to the root of the installed OS. It is automatically
+  copied to `$INDIR` if present and if `$SETUP_HOSTNAME` is set;
+- `post-install.user-$SETUP_USERNAME.tgz` (optional) - archive, usually
+  unpacked by your script to the user's home directory in the installed OS.
+  It is automatically copied to `$INDIR` if present.
+
+Note that there should not be a script named `post-install.job` in the
+`$HOSTDIR` directory, since it is already in `$LIBEXEC/jobs` and preparing
+your job, in particular, it mounts everything the necessary directories of
+the installed OS, so that in the future it would be easier to do chroot
+into it. There is no need to make files executable.
+
+The `post-install` job can be run multiple times on the same virtual machine
+with a different set of files and parameters. To change the default values,
+export the `$SETUP_PROFILE` variable to the environment. The `post-install`
+job additionally defines the following parameters:
+
+- `$SETUP_PROFILE` - Setup profile name. It is transmitted only through the
+  environment. All of the files listed above begin with this name. Default
+  is: "post-install".
+- `$SETUP_VERBOSE` - Non-empty if the job in the ALT Rescue chroot should
+  be run with debug information (`set -x`). Debugging is also enabled if
+  the `$INDIR/DEBUG` file is present.
+- `$SETUP_ROOTDEV` - Root partition of the installed OS, eg "/dev/sda3"
+  or "LABEL=SYSTEM". If not specified, the `mount-system` command is used
+  to automatically mount the directories of the installed OS.
+- `$SETUP_SCRIPT` - The included script of the your job. By default, it's
+  defined by the profile name with the addition of the ".sh" suffix.
+- `$SETUP_HOSTNAME` - The name of the host with the installed OS, if it
+  needs to be changed after installation, or to determine the name of an
+  archive with files for unpack to the root of the installed OS.
+- `$SETUP_USERNAME` - The name of the user in the installed OS to manipulate
+  his profile. By default, the username is taken from the host OS.
+- `$SETUP_USER_UID` - UID of the user in the installed OS for manipulating
+  his profile. By default, the user's UID is taken from the host OS.
+- `$SETUP_FILES` (array) - A list of files (relative to `$HOSTDIR` or with
+  absolute paths) that need to be additionally copied to `$INDIR` before
+  the job is executed.
+- `$DESTDIR` - Directory with installed OS, for example, "/mnt/system1".
+  Usually it is detected and mounted automatically, but if you need to
+  perform these actions in your script in a different way, write your
+  own non-empty value to this variable.
+
+You can define any other parameters, for example:
+
+- `$SETUP_PASSWORD` - Password of the regular user, if you need to
+  change it after OS installation.
+- `$SETUP_ROOT_PWD` - Administrator (root) password, if you need to
+  change it after OS installation.
+- `$SETUP_TIMEZONE` - Time zone, if you need to change it after OS
+  installation.
+
+You can use the following standard functions in your job script:
+
+- `fatal()` - Displays an error message and crashes.
+- `run()` - Performs the specified action and logs it.
+
 ## Usage examples
 
 `vm -c 8 -m 4G @create WS10 /iso/image.iso @job prepare @run @backup`

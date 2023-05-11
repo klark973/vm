@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# This file is covered by the GNU General Public License
+# version 3, or (at your option) any later version, which
+# should be included with sources as the file COPYING.
+#
+# Copyright (C) 2023, Leonid Krivoshein <klark@altlinux.org>
+#
+SETUP_PROFILE="${SETUP_PROFILE:-post-install}"
+
+if [ -s "$HOSTDIR/$SETUP_PROFILE.post" ]; then
+	SETUP_VERBOSE=
+	SETUP_FILES=()
+	SETUP_ROOTDEV=
+	SETUP_HOSTNAME=
+	SETUP_USERNAME=
+	SETUP_USER_UID=
+
+	. "$WORKDIR"/.in/job.env
+	. "$HOSTDIR/$SETUP_PROFILE.post"
+fi

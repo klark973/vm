@@ -1,0 +1,80 @@
+#!/bin/sh
+#
+# This file is covered by the GNU General Public License
+# version 3, or (at your option) any later version, which
+# should be included with sources as the file COPYING.
+#
+# Copyright (C) 2023, Leonid Krivoshein <klark@altlinux.org>
+#
+SETUP_VERBOSE=
+SETUP_FILES=()
+SETUP_ROOTDEV=
+[ ! -s "$INDIR"/job.env ] ||
+	. "$INDIR"/job.env
+SETUP_SCRIPT=post-install.sh
+FSTAB_FILE=/tmp/fstab.1
+
+devnode() {
+	local devname="$1"
+
+	case "$devname" in
+	UUID=*)   devname="$(run blkid -c /dev/null -U "${devname#UUID=*}")";;
+	LABEL=*)  devname="$(run blkid -c /dev/null -L "${devname#LABEL=*}")";;
+	*)	  devname="$(run readlink -fv -- "$devname")";;
+	esac
+
+	printf "%s" "$devname"
+}
+
+load_fstab() {
+	local devname="$1"
+
+	run test -b "$devname"
+	run mkdir -p -m 0755 -- "$DESTDIR"
+	run mount -o ro -- "$devname" "$DESTDIR"
+	run test -s "$DESTDIR"/etc/fstab
+	run cp -Lf -- "$DESTDIR"/etc/fstab "$FSTAB_FILE"
+	run umount -- "$DESTDIR"
+}
+
+mount_special() {
+	local mp="$1"
+
+	run mount --bind /proc "$mp"/proc
+	run mount --bind /sys "$mp"/sys
+	run mount --bind /dev "$mp"/dev
+
+	if [ -d "$mp"/sys/firmware/efi/efivars ] &&
+		run mountpoint /sys/firmware/efi/efivars
+	then
+		run mount --bind /sys/firmware/efi/efivars \
+				"$mp"/sys/firmware/efi/efivars
+	fi
+}
+
+
+# Entry point
+printf "* Mounting target filesystems...\n"
+[ -n "$SETUP_ROOTDEV" ] || [ ! -s ROOTDEV ] ||
+	SETUP_ROOTDEV="$(head -n1 ROOTDEV)"
+if [ -z "${DESTDIR-}" ] && [ -z "$SETUP_ROOTDEV" ]; then
+	run mount-system && [ -s /mnt/system1/etc/fstab ] ||
+		fatal "Can't mount target system by mount-system script."
+	DESTDIR=/mnt/system1
+elif [ -z "${DESTDIR-}" ]; then
+	DESTDIR=/mnt/target
+	run load_fstab "$(run devnode "$SETUP_ROOTDEV")" ||
+		fatal "Block device with valid rootfs not found: '$SETUP_ROOTDEV'."
+	run mount-fstab "$FSTAB_FILE" "$DESTDIR"
+	run mount_special "$DESTDIR"
+	run rm -f -- "$FSTAB_FILE"
+fi
+unset FSTAB_FILE
+
+printf "* Starting post-install section...\n"
+. "$INDIR/$SETUP_SCRIPT"
+unset SETUP_SCRIPT
+
+printf "\n* Unmounting filesystems...\n"
+run umount -R -- "$DESTDIR" ||:
+run rmdir -- "$DESTDIR" ||:
