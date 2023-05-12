@@ -1,13 +1,14 @@
 # VM
 
-VM is a simple set of scripts for myself that can be used to automate
+VM is just a set of scripts for myself that can be used to automate
 the startup and deployment of virtual machines. It is just a wrapper
 over the qemu command line.
 
-## Requires
+## System requirements
 
 - `qemu-system-*` binary for your platform.
 - `qemu-img` binary for creating initial HDD's.
+- OVMF BIOS files for UEFI-booting in guest VM.
 - `pigz` and `unpigz` binaries for snapshoting.
 - `remote-viewer` binary (optional) for working with guest VM.
 - `bash` on host and `sh` inside Rescue VM for executing jobs.
@@ -43,21 +44,52 @@ Host    kvm
 
 ## Preparing special rescue ISO-image
 
+Here is sample action plan:
+
 ```bash
-$ mkdir -p -m 755 ~/tmp/stage3
+$ mkdir -p -m 755 ~/tmp/stage3 ~/vm/rescue-x86_64
+$ cd ~/vm/rescue-x86_64/
+$ wget http://nightly.altlinux.org/p10/permalink/alt-p10-rescue-latest-x86_64.iso
 $ cp -Lf ~/vm/scripts/rescue-stage3 ~/tmp/stage3/autorun
 $ alt2deploy -r ~/tmp/stage3 alt-p10-rescue-latest-x86_64.iso rescue-p10-x86_64.iso
-$ rm -rf ~/tmp/stage3
+$ rm -rf ~/tmp/stage3 alt-p10-rescue-latest-x86_64.iso
+$ cat >guest.env <<EOF
+RESCUE_CORES=4
+RESCUE_MEMORY="2G"
+RESCUE_ISO="rescue-p10-x86_64.iso"
+RESCUE_FORWARDS="hostfwd=tcp::5555-:22"
+EOF
 ```
 
-## Changing the defaults
+## Configuration and changing the defaults
 
 - `/etc/vm.conf` - global settings for all users, they override the defaults.
 - `~/.config/vm.conf` - user personal setting, they also override the global
   settings for all users.
 - `vm.defaults` - additional qemu arguments: this file can be placed in
   the `/etc`, `~/.config`, `$HOSTDIR` or `$WORKDIR` directories (see
-  `vm-cmd-run.sh` to get more details.
+  `vm-cmd-run.sh` to get more details).
+
+### check-media script
+
+The include script `check-media` must set the variable `$MEDIA` and,
+if necessary, make sure that the connected external media is available.
+
+### Example of ~/.config/vm.conf:
+
+```
+MEMORY=4G
+MEDIA_MIRROR="/alt-mirror"
+MEDIA_STORAGE="/images/iso"
+FORWARDS="hostfwd=tcp::5555-:22"
+SSHKEYS=( "$HOME/.ssh/id_ed25519.pub" )
+```
+
+Where:
+
+- `$MEDIA_MIRROR` - Directory of repositories mirror relative to `$MEDIA`.
+- `$MEDIA_STORAGE` - Directory of ISO-images relative to `$MEDIA`.
+- `$SSHKEYS` (array) - List of public SSH-key paths that used in some scripts.
 
 ## Creating snapshots
 
@@ -79,7 +111,7 @@ is automatically started.
 A job is an arbitrary set of files, one, two or three scripts, of which
 only script `.job` is required. Job scripts can be located in two places:
 in the VM directory and in the general location for storing them:
-`$LIBEXEC/jobs`. The rest of the files for a guest can be anywhere.
+`$LIBEXEC/jobs`. The rest of the files for a guest VM can be anywhere.
 
 Usually script `.pre` copies everything needed to `$WORKDIR/.in/`, script
 `.job` is copied there too. After the job has completed and the virtual
@@ -98,7 +130,7 @@ all variables which declared in `vm-main.sh`. Most useful are:
 - `$WORKDIR` - temporary directory with working files of the VM.
   It may be same as `$HOSTDIR` only when program running with the
   option `--inplace`, but by default working files created on the
-  runfs or tmpfs.
+  runfs or tmpfs (in the `$TMPDIR`).
 - `$LIBEXEC` - directory with this utility scripts such as `vm-main.sh`.
 
 Script `<JOBNAME>.job` running inside special rescue VM. It can use
@@ -175,9 +207,9 @@ job additionally defines the following parameters:
 - `$SETUP_PROFILE` - Setup profile name. It is transmitted only through the
   environment. All of the files listed above begin with this name. Default
   is: "post-install".
-- `$SETUP_VERBOSE` - Non-empty if the job in the ALT Rescue chroot should
-  be run with debug information (`set -x`). Debugging is also enabled if
-  the `$INDIR/DEBUG` file is present.
+- `$SETUP_VERBOSE` - Non-empty if the job in the guest OS with ALT Rescue
+  should be run with debug information (`set -x`). Debugging is also enabled
+  if the `$INDIR/DEBUG` file is present.
 - `$SETUP_ROOTDEV` - Root partition of the installed OS, eg "/dev/sda3"
   or "LABEL=SYSTEM". If not specified, the `mount-system` command is used
   to automatically mount the directories of the installed OS.
@@ -218,22 +250,22 @@ You can use the following standard functions in your job script:
 
 VM files will be created in the current directory with the following
 parameters: GUESTNAME=WS10, CORES=8, MEMORY=4G, BOOTIMAGE=/iso/image.iso,
-all other by default; then job 'prepare' will be executed inside special
+all other by default; then job "prepare" will be executed inside special
 RESCUE VM; then VM will be bootted once from the specified BOOTIMAGE;
 and after the VM will be switched off, a snapshot "S0" will be created.
 
 `vm --no-uefi --tmeout=30 @restore S2 @job add-ssh-keys`
 
-VM will be restored from snapshot S2; then job 'add-ssh-keys' will be
+VM will be restored from snapshot "S2"; then job "add-ssh-keys" will be
 executed inside special RESCUE VM: this job has a 30 seconds time limit
-for executing from job start, and VM will be started in Legacy/CSM mode,
+for executing from job start; and VM will be started in Legacy/CSM mode,
 even if it VM was created with UEFI-boot.
 
 ![More VM examples](vm.png "Typical usage of the VM utility")
 
 ## Getting help
 
-Just run: `vm -h`.
+Just run: `vm -h`. See also: `alt2deploy -h`.
 
 ## License
 
