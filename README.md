@@ -31,7 +31,7 @@ over the qemu command line.
 - Create sub-directory `vm` in your home directory and copy `scripts`
   sub-directory to.
 - Prepare special rescue ISO-image for execution jobs inside ALT Rescue.
-- Copy following lines to your `~/.ssh/config`:
+- Add the following lines to your `~/.ssh/config`:
 
 ```
 Host    kvm
@@ -243,6 +243,8 @@ You can use the following standard functions in your job script:
 
 - `fatal()` - Displays an error message and crashes.
 - `run()` - Performs the specified action and logs it.
+
+See also example of the post-install usage in the `builder` sub-directory.
 
 ## Usage examples
 

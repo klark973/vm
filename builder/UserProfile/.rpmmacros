@@ -1,0 +1,5 @@
+%_topdir	%homedir/RPM
+%_tmppath	/tmp/.private/MYUSERNAME
+
+%packager	USER LASTNAME <MYUSERNAME@altlinux.org>
+#%_gpg_name	AABBCCDDEEFF0011223344556677889900AABBCC

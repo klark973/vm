@@ -1,0 +1,10 @@
+[user]
+    name = USER LASTNAME
+    email = MYUSERNAME@altlinux.org
+#   signingkey = 0xAABBCCDD
+[gear]
+    compress = --gzip
+[core]
+    quotepath = off
+[init]
+    defaultBranch = master

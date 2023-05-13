@@ -1,0 +1,6 @@
+#!/bin/bash
+
+if [ -s "$WORKDIR"/guest.env ]; then
+	sed -i 's,"in:@HOSTDIR@","build:rw:$HOME/build",' "$WORKDIR"/guest.env
+	sed -i 's,"out:rw:@DATADIR@","host:rw:$HOME/hasher",' "$WORKDIR"/guest.env
+fi

@@ -1,0 +1,9 @@
+def_target="x86_64"
+workdir="/tmp/.private/MYUSERNAME"
+packager="`rpm --eval %packager`"
+apt_config="/home/MYUSERNAME/.hasher/sisyphus-x86_64.conf"
+known_mountpoints=/proc,/dev/pts
+def_repo="/home/MYUSERNAME/out"
+mount=/proc,/dev/pts
+lazy_cleanup=1
+with_stuff=1

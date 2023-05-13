@@ -1,0 +1,10 @@
+# Local mirror
+rpm [p10] file:/ALT/p10 i586 classic
+rpm [p10] file:/ALT/p10 noarch classic
+
+# Local repo
+rpm-dir file:/home/MYUSERNAME/hasher-repo i586 hasher
+rpm-dir file:/mnt/space/office/MYUSERNAME/repo-ecp i586 ecp
+
+# Task
+rpm http://git.altlinux.org/repo/294362 i586 task

@@ -1,0 +1,6 @@
+#!/bin/bash
+
+[ -d "$HOME"/build ] ||
+	fatal "~/build directory not found!"
+[ -d "$HOME"/hasher ] ||
+	fatal "~/hasher directory not found!"
