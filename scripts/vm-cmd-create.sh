@@ -124,7 +124,7 @@ vm_cmd_create_exec() {
 	( . "$WORKDIR"/guest.env ) >/dev/null 2>&1 ||
 		fatal "Invalid parameters set."
 	:> "$WORKDIR"/FIRSTTIME
-	printf "${CLR_OK}*** VM was created successully!${CLR_NORM}\n"
+	printf "${CLR_OK}*** VM was created successfully!${CLR_NORM}\n"
 }
 
 fi # vm_cmd_create_included
