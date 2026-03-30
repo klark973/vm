@@ -224,7 +224,7 @@ vm_build_disks() {
 		VIRT)
 			cat <<-EOF
 			  -drive if=none,id=drive$i,discard=ignore,aio=threads,format="$fmt",file="$fname" \\
-			  -device virtio-blk-pci,drive=drive$i,scsi=off,write-cache=off \\
+			  -device virtio-blk-pci,drive=drive$i,write-cache=off \\
 			EOF
 			;;
 		*)
@@ -243,11 +243,13 @@ vm_build_network() {
 	local ro="local,security_model=passthrough,readonly=on"
 	local rw="local,security_model=none"
 
-	# First network adapter is required
-	cat <<-EOF
-	  -netdev user,id=net0,restrict=no${FORWARDS:+,$FORWARDS} \\
-	  -device virtio-net-pci,netdev=net0,id=eth0 \\
-	EOF
+	# First network adapter is optional
+	if [ -n "$USENETDEV" ]; then
+		cat <<-EOF
+		  -netdev user,id=net0,restrict=no${FORWARDS:+,$FORWARDS} \\
+		  -device virtio-net-pci,netdev=net0,id=eth0 \\
+		EOF
+	fi
 
 	# Shared folders between host and guest
 	for share in "${SHARES[@]}"; do

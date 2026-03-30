@@ -101,6 +101,7 @@ Options:
   -u, --uefi      First time OS setup in UEFI boot mode.
   --no-keep-cd    Eject ISO-image from the tray after OS setup.
   --no-uefi       Don't use UEFI boot mode at the first time OS setup.
+  --no-netdev     Don't create the first network adapter by default.
   --use-tmpdir    Use separate working directory for temporary files.
   --inplace,
   --no-tmpdir     Do everything in the host directory, don't use

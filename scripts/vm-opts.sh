@@ -10,7 +10,8 @@ saved_CLR_ERR="$CLR_ERR"; CLR_ERR=
 s_opts="+D:H:S:a:c:d:f:i:km:np:r:s:t:uvh"
 l_opts="disks:,sockets:,arch:,cores:,hostdir:,forward:,host:,image:,keep-cd"
 l_opts="$l_opts,no-keep-cd,memory:,no-colors,port:,rescue:,share:,timeout:"
-l_opts="$l_opts,uefi,no-uefi,use-tmpdir,inplace,no-tmpdir,version,help"
+l_opts="$l_opts,uefi,no-uefi,no-netdev,use-tmpdir,inplace,no-tmpdir"
+l_opts="$l_opts,version,help"
 l_opts=$(getopt -n "$PROG" -o "$s_opts" -l "$l_opts" -- "$@") ||
 	fatal "Invalid command line usage, try '$PROG -h' for more details."
 eval set -- "$l_opts"
@@ -110,6 +111,9 @@ while [ $# -gt 0 ]; do
 		;;
 	--no-uefi)
 		ARG_UEFI=0
+		;;
+	--no-netdev)
+		USENETDEV=
 		;;
 	--use-tmpdir)
 		INPLACE=
